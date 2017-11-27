@@ -14,6 +14,14 @@ const int HEIGHT = 600;
 class HelloTriangleApplication
 {
 public:
+  struct QueueFamilyIndices
+  {
+    int graphicsFamily = -1;
+    bool isComplete()
+    {
+      return graphicsFamily >= 0;
+    }
+  };
   void run() 
   {
     initWindow();
@@ -26,6 +34,7 @@ public:
 private:
   GLFWwindow* window;
   VkInstance instance;
+  VkPhysicalDevice physicalDevice;
   void initWindow()
   {
     glfwInit();
@@ -72,7 +81,9 @@ private:
       std::vector<VkExtensionProperties> extensions(extensionCount);
 
       // Query the extensions details
-      vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
+      vkEnumerateInstanceExtensionProperties(nullptr, 
+                                             &extensionCount, 
+                                              extensions.data());
 
       // Loop through the names of all the extentions available
       std::cout << "available extensions:" << std::endl;
@@ -102,9 +113,104 @@ private:
     createInstance();
   }
 
+  /*
+    Everything that we do in Vulkan requires commands such as obtaining texture
+    information and drawing, but these commands are required to be submitted to
+    a queue. There are different types of queue families and each family allows
+    only a subset of commands. Since we need a queue for our graphics device we
+    search for a suitable queue for graphics commands
+  */
+  QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device)
+  {
+    QueueFamilyIndices indices;
+
+    // Standard find count then make a vector with the found count and fill up 
+    // vector with queuried queue family information
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+    // VkQueueFamilyProperties contains details about types of operations that 
+    // are supported and the number of queues that can be created based on family
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, 
+                                            &queueFamilyCount, 
+                                             queueFamilies.data());
+
+    // We need a queue family that supports VK_QUEUE_GRAPHICS_BIT
+    int i = 0;
+    for (const auto& queueFamily : queueFamilies)
+    {
+      if (queueFamily.queueCount > 0
+       && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+      {
+        indices.graphicsFamily = i;
+      }
+      if (indices.isComplete())
+      {
+        break;
+      }
+      i++;
+    }
+
+    return indices;
+  }
+
+  bool isDeviceSuitable(VkPhysicalDevice device)
+  {
+    QueueFamilyIndices indices = findQueueFamilies(device);
+    return indices.isComplete();
+
+    /*
+      If we did want to find devices with particularly desired properties
+      you could querie the physical information such as name, types and
+      supported vulkan versions
+    */
+
+    /*
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+    // Checks for optional feature support such as texture compression, 
+    // 64 bit floats and multi viewport rendering
+    VkPhysicalDeviceFeatures deviceFeatures;
+    vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+    // Consider that our device is only usable with graphics cards that
+    // supports geometry shaders
+    return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+        && deviceFeatures.geometryShader;
+    
+     There are several ways of finding the best physical device or even
+     scoring the best possible device
+    */
+  }
+
+  // Find the physical device or the graphics card in the system that supports
+  // the features we need. (We can select more than one)
   void pickPhysicalDevice()
   {
+    // Gets implicitly destroyed when VkInstance is destroyed
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
+    uint32_t deviceCount = 0;
+    // Count the number of available physical devices
+    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    if (deviceCount == 0)
+      throw std::runtime_error("failed to find GPUs with Vulkan support!");
+    std::vector<VkPhysicalDevice> devices(deviceCount);
+    // Stores all the available devices within our list
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
+
+    for (const auto& device : devices)
+    {
+      if (isDeviceSuitable(device))
+      {
+        physicalDevice = device;
+        break;
+      }
+    }
+
+    if (physicalDevice == VK_NULL_HANDLE)
+      throw std::runtime_error("failed to find a suitable GPU!");
   }
 
   // Run while checking for events like pressing xuntil the window itself has
