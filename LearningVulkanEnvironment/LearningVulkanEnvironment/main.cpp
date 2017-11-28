@@ -25,9 +25,7 @@ public:
   void run() 
   {
     initWindow();
-    createInstance();
     initVulkan();
-    pickPhysicalDevice();
     mainLoop();
     cleanup();
   }
@@ -35,6 +33,8 @@ private:
   GLFWwindow* window;
   VkInstance instance;
   VkPhysicalDevice physicalDevice;
+  VkDevice device;
+  VkQueue graphicsQueue;
   void initWindow()
   {
     glfwInit();
@@ -70,27 +70,27 @@ private:
 
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-    {
-      // Checking for extension support
-      uint32_t extensionCount = 0;
-      // Used to retrieve a list of supported extensions before creating an
-      // instance. 
-      vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-      // List to hold the extension details
-      std::vector<VkExtensionProperties> extensions(extensionCount);
-
-      // Query the extensions details
-      vkEnumerateInstanceExtensionProperties(nullptr, 
-                                             &extensionCount, 
-                                              extensions.data());
-
-      // Loop through the names of all the extentions available
-      std::cout << "available extensions:" << std::endl;
-
-      for (const auto& extension : extensions)
-        std::cout << "\t" << extension.extensionName << std::endl;
-    }
+    // Checking for extension support
+    //{
+    //  uint32_t extensionCount = 0;
+    //  // Used to retrieve a list of supported extensions before creating an
+    //  // instance. 
+    //  vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+    //
+    //  // List to hold the extension details
+    //  std::vector<VkExtensionProperties> extensions(extensionCount);
+    //
+    //  // Query the extensions details
+    //  vkEnumerateInstanceExtensionProperties(nullptr, 
+    //                                         &extensionCount, 
+    //                                          extensions.data());
+    //
+    //  // Loop through the names of all the extentions available
+    //  std::cout << "available extensions:" << std::endl;
+    //
+    //  for (const auto& extension : extensions)
+    //    std::cout << "\t" << extension.extensionName << std::endl;
+    //}
 
     // These determine the global validations layers to enable
     createInfo.enabledExtensionCount = glfwExtensionCount;
@@ -108,9 +108,45 @@ private:
       throw std::runtime_error("failed to create instance!");
   }
 
+  void createLogicalDevice()
+  {
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+    
+    // This structure describes the number of queues we want for a single queue 
+    // family
+    VkDeviceQueueCreateInfo queueCreateInfo = {};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
+    queueCreateInfo.queueCount = 1;
+
+    // Vulkan lets you assign priorities using a floating point number which
+    // will influence the schedule of buffer execution (This is required even
+    // for a small queue)
+    float queuePriority = 1.0f;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
+
+    VkPhysicalDeviceFeatures deviceFeatures = {};
+
+    VkDeviceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+    createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.enabledExtensionCount = 0;
+
+    if (vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS)
+      throw std::runtime_error("failed to create logical device!");
+
+    // Retrieve queue handles for each queue family, since we are only creating
+    // a single queue from this family we simply use index 0
+    vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
+  }
+
   void initVulkan()
   {
     createInstance();
+    pickPhysicalDevice();
+    createLogicalDevice();
   }
 
   /*
@@ -124,7 +160,7 @@ private:
   {
     QueueFamilyIndices indices;
 
-    // Standard find count then make a vector with the found count and fill up 
+    // Standard find count then make a vector with the family count and fill up 
     // vector with queuried queue family information
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
@@ -225,6 +261,7 @@ private:
 
   void cleanup()
   {
+    vkDestroyDevice(device, nullptr);
     // Instance should be destroyed right before program exits.
     vkDestroyInstance(instance, nullptr);
     glfwDestroyWindow(window);
