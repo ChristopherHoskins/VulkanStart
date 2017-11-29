@@ -58,7 +58,7 @@ private:
     // There is also a pNext member which we are leaving to default, but pNext
     // is used to point to extension information in the future.
     
-
+    //s
     // This struct is not optional, this tells the vulkan driver which global
     // extensions and validation layers we want to use
     VkInstanceCreateInfo createInfo = {};
