@@ -11,6 +11,63 @@
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
+/*
+  Implicity enables a whole range of useful diagnostic layers.
+  Example: 
+    if (pCreateInfo == nullptr || instance == nullptr) 
+    {
+        log("Null pointer passed to required parameter!");
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+*/
+const std::vector<const char*> validationLayers =
+{
+  "VK_LAYER_LUNARG_standard_validation"
+};
+
+bool checkValidationLayerSupport()
+{
+  uint32_t layerCount;
+  /*
+    General pattern for obtaining available layers, extensions devices, etc.
+    Count all avaiable things
+    Initialize list to contain counted layers
+    Fill list with available things to search
+  */
+  vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+  std::vector<VkLayerProperties> availableLayers(layerCount);
+  vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+
+  // Now check if all implicit layers in VK_LAYER_LUNARG_standard_validation
+  // are in the list of available layers from our search
+  for (const char* layerName : validationLayers)
+  {
+    bool layerFound = false;
+
+    for (const auto& layerProperties : availableLayers)
+    {
+      if (strcmp(layerName, layerProperties.layerName) == 0)
+      {
+        layerFound = true;
+        break;
+      }
+    }
+
+    if (!layerFound)
+      return false;
+  }
+
+  return true;
+}
+
+// Preproccesor for whether to application is in debug or release. We dont want
+// error checking during release
+#ifdef NDEBUG
+  const bool enableValidationLayers = false;
+#else
+  const bool enableValidationLayers = true;
+#endif
+
 class HelloTriangleApplication
 {
 public:
@@ -35,6 +92,7 @@ private:
   VkPhysicalDevice physicalDevice;
   VkDevice device;
   VkQueue graphicsQueue;
+  VkDebugReportCallbackEXT callback;
   void initWindow()
   {
     glfwInit();
@@ -44,8 +102,32 @@ private:
 
     window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
   }
+
+  std::vector<const char*> getRequiredExtensions()
+  {
+    std::vector<const char*> extensions;
+
+    unsigned int glfwExtensionCount = 0;
+    const char** glfwExtensions;
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+    for (unsigned i = 0; i < glfwExtensionCount; ++i)
+      extensions.push_back(glfwExtensions[i]);
+
+    // If we are in debug we want to pop this extension in to allow us to add
+    // debugging validation layers into the current vulkan instance
+    if (enableValidationLayers)
+      extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+
+    return extensions;
+  }
+
   void createInstance()
   {
+    // The validation layers that we want arent available on this computer
+    if (enableValidationLayers && !checkValidationLayerSupport())
+      throw std::runtime_error("validation layers requested, but not available!");
+
     VkApplicationInfo appInfo = {};
     // Required to be explicitly specified. It's done so for backwards
     // compatibility.
@@ -58,44 +140,54 @@ private:
     // There is also a pNext member which we are leaving to default, but pNext
     // is used to point to extension information in the future.
     
-    //s
     // This struct is not optional, this tells the vulkan driver which global
     // extensions and validation layers we want to use
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    unsigned int glfwExtensionCount = 0;
-    const char** glfwExtensions;
+    auto extensions = getRequiredExtensions();
 
-    glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-    // Checking for extension support
-    //{
-    //  uint32_t extensionCount = 0;
-    //  // Used to retrieve a list of supported extensions before creating an
-    //  // instance. 
-    //  vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-    //
-    //  // List to hold the extension details
-    //  std::vector<VkExtensionProperties> extensions(extensionCount);
-    //
-    //  // Query the extensions details
-    //  vkEnumerateInstanceExtensionProperties(nullptr, 
-    //                                         &extensionCount, 
-    //                                          extensions.data());
-    //
-    //  // Loop through the names of all the extentions available
-    //  std::cout << "available extensions:" << std::endl;
-    //
-    //  for (const auto& extension : extensions)
-    //    std::cout << "\t" << extension.extensionName << std::endl;
-    //}
+    /*
+      //Checking for extension support
+      {
+        uint32_t extensionCount = 0;
+        // Used to retrieve a list of supported extensions before creating an
+        // instance. 
+        vkEnumerateInstanceExtensionProperties(nullptr, 
+                                              &extensionCount, 
+                                               nullptr);
+    
+        // List to hold the extension details
+        std::vector<VkExtensionProperties> extensions(extensionCount);
+    
+        // Query the extensions details
+        vkEnumerateInstanceExtensionProperties(nullptr, 
+                                               &extensionCount, 
+                                                extensions.data());
+    
+        // Loop through the names of all the extentions available
+        std::cout << "available extensions:" << std::endl;
+    
+        for (const auto& extension : extensions)
+          std::cout << "\t" << extension.extensionName << std::endl;
+      }
+    */
 
     // These determine the global validations layers to enable
-    createInfo.enabledExtensionCount = glfwExtensionCount;
-    createInfo.ppEnabledExtensionNames = glfwExtensions;
-    createInfo.enabledLayerCount = 0;
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+    createInfo.ppEnabledExtensionNames = extensions.data();
+
+    // Enable the list of validation layer we want
+    if (enableValidationLayers)
+    {
+      createInfo.enabledLayerCount = validationLayers.size();
+      createInfo.ppEnabledLayerNames = validationLayers.data();
+    }
+    else
+    {
+      createInfo.enabledLayerCount = 0;
+    }
 
     /* 
     General pattern of object creation is
@@ -140,6 +232,33 @@ private:
     // Retrieve queue handles for each queue family, since we are only creating
     // a single queue from this family we simply use index 0
     vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
+  }
+
+  static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+    VkDebugReportFlagsEXT flags,
+    VkDebugReportObjectTypeEXT objType,
+    uint64_t obj,
+    size_t location,
+    int32_t code,
+    const char* layerPrefix,
+    const char* msg,
+    void* userData)
+  {
+    std::cerr << "validation layer: " << msg << std::endl;
+
+    return VK_FALSE;
+  }
+
+  void setupDebugCallback()
+  {
+    if (!enableValidationLayers) return;
+
+    VkDebugReportCallbackCreateInfoEXT createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+    // What types of messages I would like to receive
+    createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT 
+                     | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+    createInfo.pfnCallback = debugCallback;
   }
 
   void initVulkan()
