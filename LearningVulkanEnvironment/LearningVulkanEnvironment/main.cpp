@@ -148,32 +148,6 @@ private:
 
     auto extensions = getRequiredExtensions();
 
-    /*
-      //Checking for extension support
-      {
-        uint32_t extensionCount = 0;
-        // Used to retrieve a list of supported extensions before creating an
-        // instance. 
-        vkEnumerateInstanceExtensionProperties(nullptr, 
-                                              &extensionCount, 
-                                               nullptr);
-    
-        // List to hold the extension details
-        std::vector<VkExtensionProperties> extensions(extensionCount);
-    
-        // Query the extensions details
-        vkEnumerateInstanceExtensionProperties(nullptr, 
-                                               &extensionCount, 
-                                                extensions.data());
-    
-        // Loop through the names of all the extentions available
-        std::cout << "available extensions:" << std::endl;
-    
-        for (const auto& extension : extensions)
-          std::cout << "\t" << extension.extensionName << std::endl;
-      }
-    */
-
     // These determine the global validations layers to enable
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
@@ -259,13 +233,32 @@ private:
     createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT 
                      | VK_DEBUG_REPORT_WARNING_BIT_EXT;
     createInfo.pfnCallback = debugCallback;
+
+    if (CreateDebugReportCallbackEXT(instance, &createInfo, nullptr, &callback) != VK_SUCCESS)
+      throw std::runtime_error("failed to set up debug callback!");
+  }
+
+  VkResult CreateDebugReportCallbackEXT(VkInstance instance, 
+    const VkDebugReportCallbackCreateInfoEXT* pCreateInfo,
+    const VkAllocationCallbacks* pAllocator, 
+    VkDebugReportCallbackEXT* pCallback)
+  {
+    // Since this is an extension function, it is not automatically loaded. We
+    // have to look up its address using vkGetInstanceProcAddr.
+    auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(instance, 
+                                                  "vkCreateDebugReportCallbackEXT");
+    if (func != nullptr)
+      return func(instance, pCreateInfo, pAllocator, pCallback);
+    else
+      return VK_ERROR_EXTENSION_NOT_PRESENT;
   }
 
   void initVulkan()
   {
     createInstance();
-    pickPhysicalDevice();
-    createLogicalDevice();
+    setupDebugCallback();
+    //pickPhysicalDevice();
+    //createLogicalDevice();
   }
 
   /*
@@ -368,6 +361,15 @@ private:
       throw std::runtime_error("failed to find a suitable GPU!");
   }
 
+  void DestroyDebugReportCallbackEXT(VkInstance instance,
+    VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator)
+  {
+    auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(instance,
+      "vkDestroyDebugReportCallbackEXT");
+    if (func != nullptr)
+      func(instance, callback, pAllocator);
+  }
+
   // Run while checking for events like pressing xuntil the window itself has
   // been closed
   void mainLoop()
@@ -380,8 +382,9 @@ private:
 
   void cleanup()
   {
-    vkDestroyDevice(device, nullptr);
+    //vkDestroyDevice(device, nullptr);
     // Instance should be destroyed right before program exits.
+    DestroyDebugReportCallbackEXT(instance, callback, nullptr);
     vkDestroyInstance(instance, nullptr);
     glfwDestroyWindow(window);
     glfwTerminate();
@@ -401,6 +404,9 @@ int main()
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
   }
+
+  int n;
+  std::cin >> n;
 
   return EXIT_SUCCESS;
 }
