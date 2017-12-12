@@ -257,7 +257,7 @@ private:
   {
     createInstance();
     setupDebugCallback();
-    //pickPhysicalDevice();
+    pickPhysicalDevice();
     //createLogicalDevice();
   }
 
