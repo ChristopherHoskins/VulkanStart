@@ -115,9 +115,9 @@ private:
   std::vector<VkCommandBuffer> commandBuffers;
   VkCommandPool commandPool;
   std::vector<VkFramebuffer> swapChainFramebuffers;
-  VkPipeline graphicsPipeline;
   VkRenderPass renderPass;
   VkPipelineLayout pipelineLayout;
+  VkPipeline graphicsPipeline;
   GLFWwindow* window;
   VkInstance instance;
   VkPhysicalDevice physicalDevice;
@@ -130,7 +130,6 @@ private:
   VkExtent2D swapChainExtent;
   VkDebugReportCallbackEXT callback;
   VkSurfaceKHR surface;
-  VkPipelineLayout pipelineLayout;
   void initWindow()
   {
     glfwInit();
@@ -326,9 +325,9 @@ private:
 
       vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-      vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+        vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-      vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+        vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
 
       vkCmdEndRenderPass(commandBuffers[i]);
 
@@ -706,8 +705,6 @@ private:
     vertShaderModule = createShaderModule(vertShaderCode);
     fragShaderModule = createShaderModule(fragShaderCode);
 
-    vkDestroyShaderModule(device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device, fragShaderModule, nullptr);
 
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
     vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -759,6 +756,7 @@ private:
     rasterizer.depthClampEnable = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
@@ -816,9 +814,13 @@ private:
     pipelineInfo.layout = pipelineLayout;
     pipelineInfo.renderPass = renderPass;
     pipelineInfo.subpass = 0;
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS)
       throw std::runtime_error("failed to create graphics pipeline!");
+
+    vkDestroyShaderModule(device, vertShaderModule, nullptr);
+    vkDestroyShaderModule(device, fragShaderModule, nullptr);
   }
 
   VkShaderModule createShaderModule(const std::vector<char>& code)
